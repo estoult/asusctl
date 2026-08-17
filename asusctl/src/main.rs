@@ -156,6 +156,7 @@ fn do_parsed(
             crate::cli_opts::AuraSubCommand::Effect(mode) => handle_led_mode(mode)?,
             crate::cli_opts::AuraSubCommand::PowerTuf(pow) => handle_led_power1(pow)?,
             crate::cli_opts::AuraSubCommand::Power(pow) => handle_led_power2(pow)?,
+            crate::cli_opts::AuraSubCommand::AutoLight(cmd) => handle_auto_light(cmd)?,
         },
         CliCommand::Brightness(cmd) => handle_brightness(cmd)?,
         CliCommand::Profile(cmd) => handle_throttle_profile(&conn, supported_properties, cmd)?,
@@ -749,6 +750,32 @@ fn handle_led_power2(power: &LedPowerCommand2) -> Result<(), Box<dyn std::error:
         }
     }
 
+    Ok(())
+}
+
+fn handle_auto_light(cmd: &aura_cli::AutoLightCommand) -> Result<(), Box<dyn std::error::Error>> {
+    let aura_proxies = find_iface_blocking::<AuraProxyBlocking>("xyz.ljones.Aura")?;
+    for aura in aura_proxies.iter() {
+        match cmd.enable {
+            Some(enable) => {
+                aura.set_keyboard_auto_light(enable)?;
+                println!(
+                    "Keyboard auto-light on battery: {}",
+                    if enable { "enabled" } else { "disabled" }
+                );
+            }
+            None => {
+                println!(
+                    "Keyboard auto-light on battery: {}",
+                    if aura.keyboard_auto_light()? {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
+            }
+        }
+    }
     Ok(())
 }
 

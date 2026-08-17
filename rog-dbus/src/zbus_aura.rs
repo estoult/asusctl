@@ -84,6 +84,12 @@ pub trait Aura {
     /// SupportedPowerZones property
     #[zbus(property)]
     fn supported_power_zones(&self) -> zbus::Result<Vec<PowerZones>>;
+
+    /// KeyboardAutoLight property
+    #[zbus(property)]
+    fn keyboard_auto_light(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_keyboard_auto_light(&self, value: bool) -> zbus::Result<()>;
 }
 
 pub struct AuraProxyPerkey<'a>(AuraProxyBlocking<'a>);

@@ -5,6 +5,22 @@ use argh::FromArgs;
 use rog_aura::error::Error;
 use rog_aura::{AuraEffect, AuraModeNum, AuraZone, Colour, Direction, Speed};
 
+#[derive(FromArgs, Debug, Clone, Default)]
+#[argh(
+    subcommand,
+    name = "auto-light",
+    description = "auto-off keyboard backlight when idle on battery power"
+)]
+pub struct AutoLightCommand {
+    #[argh(
+        positional,
+        description = "true/false to enable/disable auto-off of the keyboard backlight after \
+                       30 seconds of no keyboard/mouse/trackpad input while on battery. Omit to \
+                       show the current state"
+    )]
+    pub enable: Option<bool>,
+}
+
 #[derive(FromArgs, Debug, Clone)]
 #[argh(
     subcommand,

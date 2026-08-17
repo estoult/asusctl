@@ -112,6 +112,22 @@ impl AuraZbus {
         Ok(config.support_data.power_zones.clone())
     }
 
+    /// If true, and the laptop is running on battery power, the keyboard
+    /// backlight is automatically turned off after a period of no
+    /// keyboard/mouse/trackpad input, then restored on the next input or
+    /// when AC power is plugged back in.
+    #[zbus(property)]
+    async fn keyboard_auto_light(&self) -> bool {
+        self.0.config.lock().await.keyboard_auto_light
+    }
+
+    #[zbus(property)]
+    async fn set_keyboard_auto_light(&mut self, enabled: bool) {
+        let mut config = self.0.config.lock().await;
+        config.keyboard_auto_light = enabled;
+        config.write();
+    }
+
     /// The current mode data
     #[zbus(property)]
     async fn led_mode(&self) -> Result<AuraModeNum, ZbErr> {
@@ -310,6 +326,9 @@ impl CtrlTask for AuraZbus {
             },
         )
         .await;
+
+        let inner4 = self.0.clone();
+        tokio::spawn(inner4.run_keyboard_auto_light_task());
 
         // let ctrl2 = self.0.clone();
         // let ctrl = self.0.lock().await;

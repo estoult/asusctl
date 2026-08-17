@@ -16,6 +16,7 @@ pub mod aura_scsi;
 pub mod aura_slash;
 pub mod aura_types;
 pub mod error;
+pub mod input_activity;
 
 use std::future::Future;
 

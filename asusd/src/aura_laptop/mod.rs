@@ -1,9 +1,10 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use config::AuraConfig;
 use config_traits::StdConfig;
-use log::info;
-use rog_aura::keyboard::{AuraLaptopUsbPackets, LedUsbPackets};
+use log::{info, warn};
+use rog_aura::keyboard::{AuraLaptopUsbPackets, AuraPowerState, LedUsbPackets};
 use rog_aura::usb::{AURA_LAPTOP_LED_APPLY, AURA_LAPTOP_LED_SET};
 use rog_aura::{AURA_LAPTOP_LED_MSG_LEN, AuraDeviceType, AuraEffect, LedBrightness, PowerZones};
 use rog_platform::hid_raw::HidRaw;
@@ -14,6 +15,10 @@ use crate::error::RogError;
 
 pub mod config;
 pub mod trait_impls;
+
+/// How long the keyboard/mouse/trackpad may be idle on battery power before
+/// the keyboard backlight is automatically turned off.
+const KEYBOARD_AUTO_LIGHT_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone)]
 pub struct Aura {
@@ -238,4 +243,99 @@ impl Aura {
         }
         Ok(())
     }
+
+    /// Turn the keyboard backlight off after a period of no keyboard, mouse,
+    /// or trackpad input while running on battery power, provided
+    /// `keyboard_auto_light` is enabled. The backlight is restored to its
+    /// previous "awake" state on the next input event or when external power
+    /// is plugged back in.
+    ///
+    /// Does nothing (returns immediately) if the power or input activity
+    /// monitors are unavailable.
+    pub async fn run_keyboard_auto_light_task(self) {
+        let Some(mut power_rx) = crate::power_state_receiver().await else {
+            warn!("Keyboard auto-light: power monitor unavailable, feature disabled");
+            return;
+        };
+        let Some(mut activity_rx) = crate::input_activity::activity_receiver().await else {
+            warn!("Keyboard auto-light: input activity monitor unavailable, feature disabled");
+            return;
+        };
+
+        let mut on_battery = !*power_rx.borrow_and_update();
+        // The previous "awake" states we overrode to turn the backlight off,
+        // kept so it can be restored exactly as it was.
+        let mut auto_off_states: Option<Vec<AuraPowerState>> = None;
+
+        loop {
+            let sleep = tokio::time::sleep(KEYBOARD_AUTO_LIGHT_TIMEOUT);
+            tokio::pin!(sleep);
+
+            tokio::select! {
+                changed = power_rx.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    let plugged = *power_rx.borrow_and_update();
+                    on_battery = !plugged;
+                    if plugged {
+                        self.restore_auto_light(&mut auto_off_states).await;
+                    }
+                }
+                changed = activity_rx.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    self.restore_auto_light(&mut auto_off_states).await;
+                }
+                _ = &mut sleep => {
+                    if on_battery
+                        && auto_off_states.is_none()
+                        && self.config.lock().await.keyboard_auto_light
+                    {
+                        self.apply_auto_light_off(&mut auto_off_states).await;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Turn off any zone currently lit while awake, remembering the previous
+    /// states so `restore_auto_light` can put them back.
+    async fn apply_auto_light_off(&self, auto_off_states: &mut Option<Vec<AuraPowerState>>) {
+        let mut config = self.config.lock().await;
+        let previous = config.enabled.states.clone();
+        let mut changed = false;
+        for state in config.enabled.states.iter_mut() {
+            if state.awake {
+                state.awake = false;
+                changed = true;
+            }
+        }
+        if !changed {
+            return;
+        }
+        info!("Keyboard auto-light: no input detected on battery, turning off backlight");
+        if let Err(e) = self.set_power_states(&config).await {
+            warn!("Keyboard auto-light: failed to turn off backlight: {e}");
+            config.enabled.states = previous;
+            return;
+        }
+        *auto_off_states = Some(previous);
+    }
+
+    /// Restore the "awake" states previously overridden by
+    /// `apply_auto_light_off`, if any.
+    async fn restore_auto_light(&self, auto_off_states: &mut Option<Vec<AuraPowerState>>) {
+        let Some(previous) = auto_off_states.take() else {
+            return;
+        };
+        let mut config = self.config.lock().await;
+        config.enabled.states = previous;
+        info!("Keyboard auto-light: restoring backlight after input or AC power");
+        if let Err(e) = self.set_power_states(&config).await {
+            warn!("Keyboard auto-light: failed to restore backlight: {e}");
+        }
+    }
 }
+

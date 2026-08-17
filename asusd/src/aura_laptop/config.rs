@@ -30,6 +30,12 @@ pub struct AuraConfig {
     pub enabled: LaptopAuraPower,
     #[serde(skip)]
     pub per_key_mode_active: bool,
+    /// If true, and the laptop is running on battery power, the keyboard
+    /// backlight is automatically turned off after a period of no
+    /// keyboard/mouse/trackpad input, then restored on the next input or
+    /// when AC power is plugged back in.
+    #[serde(default)]
+    pub keyboard_auto_light: bool,
 }
 
 impl StdConfig for AuraConfig {
@@ -75,6 +81,7 @@ impl AuraConfig {
             multizone_on: false,
             enabled,
             per_key_mode_active: false,
+            keyboard_auto_light: false,
         };
 
         for n in &config.support_data.basic_modes {

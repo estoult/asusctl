@@ -2,7 +2,9 @@ use argh::FromArgs;
 use rog_platform::platform::PlatformProfile;
 
 use crate::anime_cli::AnimeCommand;
-use crate::aura_cli::{LedBrightness, LedPowerCommand1, LedPowerCommand2, SetAuraBuiltin};
+use crate::aura_cli::{
+    AutoLightCommand, LedBrightness, LedPowerCommand1, LedPowerCommand2, SetAuraBuiltin,
+};
 use crate::fan_curve_cli::FanCurveCommand;
 use crate::scsi_cli::ScsiCommand;
 use crate::slash_cli::SlashCommand;
@@ -138,6 +140,7 @@ pub enum AuraSubCommand {
     Power(LedPowerCommand2),
     PowerTuf(LedPowerCommand1),
     Effect(LedModeCommand),
+    AutoLight(AutoLightCommand),
 }
 
 #[derive(FromArgs, Debug, Default)]
